@@ -2,6 +2,7 @@ package main
 
 import (
     "os"
+    "flag"
     "net/http"
     "github.com/go-kit/kit/log"
     "github.com/prometheus/client_golang/prometheus/promhttp"
@@ -12,6 +13,13 @@ import (
 
 // Trasport layer with entrypoint.
 func main() {
+    var (
+        listen = flag.String("listen", ":8080", "Listen addres.")
+        proxy = flag.String(
+            "proxy", "", "Optional proxy addreses for uppercase requests.")
+    )
+    flag.Parse()
+
     logger := log.NewLogfmtLogger(os.Stderr)
 
     fieldKeys := []string{"method", "error"}
@@ -40,6 +48,7 @@ func main() {
     // Setup middleware
     var svc StringService
     svc = stringService{}
+    svc = proxyingMiddleware(*proxy, logger)(svc)
     svc = loggingMiddleware{logger: logger, next: svc}
     svc = instrumentMiddleware{
         requestCount: requestCount,
@@ -65,5 +74,6 @@ func main() {
     http.Handle("/uppercase", uppercaseHandler)
     http.Handle("/count", countHandler)
     http.Handle("/metrics", promhttp.Handler())
-    http.ListenAndServe(":8080", nil)
+    logger.Log("msg", "HTTP", "addr", *listen)
+    logger.Log("err", http.ListenAndServe(*listen, nil))
 }
